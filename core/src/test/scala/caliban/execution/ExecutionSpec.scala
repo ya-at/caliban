@@ -52,6 +52,61 @@ object ExecutionSpec extends ZIOSpecDefault {
 
   override def spec =
     suite("ExecutionSpec")(
+      test("double include directive") {
+        val interpreter = graphQL(resolver).interpreter
+        val query       = gqldoc("""
+            query test($x: Boolean!, $y: Boolean!) {
+              amos: character(name: "Amos Burton") {
+                ...q @include(if: $x)
+                ...q @include(if: $y)
+              }
+            }
+
+            fragment q on Character {
+              name
+            }
+            """)
+
+        checkAll(Gen.boolean <*> Gen.boolean) { case (x, y) =>
+          val expected = if (x || y) """{"amos":{"name":"Amos Burton"}}""" else """{"amos":{}}"""
+
+          interpreter
+            .flatMap(_.execute(query, variables = Map("x" -> BooleanValue(x), "y" -> BooleanValue(y))))
+            .map { response =>
+              assertTrue(response.data.toString == expected)
+            }
+        }
+      },
+      test("@include + @skip") {
+        val interpreter = graphQL(resolver).interpreter
+        val query       = gqldoc("""
+            query test($x: Boolean!, $y: Boolean!) {
+              amos: character(name: "Amos Burton") {
+                ...q @include(if: $x)
+                ...q @skip(if: $y)
+              }
+            }
+
+            fragment q on Character {
+              name
+            }
+            """)
+
+        checkAll(Gen.boolean <*> Gen.boolean) { case (x, y) =>
+          val show = (x, y) match {
+            case (_, true) => false
+            case (x, _)    => x
+          }
+
+          val expected = if (show) """{"amos":{"name":"Amos Burton"}}""" else """{"amos":{}}"""
+
+          interpreter
+            .flatMap(_.execute(query, variables = Map("x" -> BooleanValue(x), "y" -> BooleanValue(y))))
+            .map { response =>
+              assertTrue(response.data.toString == expected)
+            }
+        }
+      },
       test("skip directive") {
         val interpreter = graphQL(resolver).interpreter
         val query       = gqldoc("""
